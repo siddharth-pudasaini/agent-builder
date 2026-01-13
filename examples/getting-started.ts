@@ -16,6 +16,10 @@ import {
     createTool,
     AgentError,
     OrchestratorError,
+    // Zod-based type-safe tools
+    z,
+    defineToolWithZod,
+    typedToolToTool,
 } from "../index";
 
 // ============================================
@@ -32,77 +36,86 @@ const llmService = new LLMService({
 console.log("✅ LLM Service initialized");
 
 // ============================================
-// Step 2: Create Tools
+// Step 2: Create Tools (Using Zod for Type Safety)
 // ============================================
 
-// Simple calculator tool
-const addTool = createTool(
-    "add",
-    "Adds two numbers together",
-    {
-        a: { type: "number", description: "First number" },
-        b: { type: "number", description: "Second number" },
-    },
-    async ({ a, b }) => {
-        const result = (a as number) + (b as number);
-        console.log(`  📊 add(${a}, ${b}) = ${result}`);
-        return result;
-    }
-);
+// NEW: Using Zod schemas for full type inference
+// The execute function gets properly typed arguments!
 
-const multiplyTool = createTool(
-    "multiply",
-    "Multiplies two numbers together",
-    {
-        a: { type: "number", description: "First number" },
-        b: { type: "number", description: "Second number" },
-    },
-    async ({ a, b }) => {
-        const result = (a as number) * (b as number);
-        console.log(`  📊 multiply(${a}, ${b}) = ${result}`);
+// Calculator with type-safe add operation
+const addTool = defineToolWithZod({
+    name: "add",
+    description: "Adds two numbers together",
+    schema: z.object({
+        a: z.number().describe("First number"),
+        b: z.number().describe("Second number"),
+    }),
+    execute: async (args) => {
+        // ✅ args is typed as { a: number; b: number }
+        const result = args.a + args.b;
+        console.log(`  📊 add(${args.a}, ${args.b}) = ${result}`);
         return result;
-    }
-);
-
-// Agentic tool - can extract parameters from natural language
-const greetTool = createTool(
-    "greet",
-    "Greets a person by name with a custom message",
-    {
-        name: { type: "string", description: "Name of the person to greet" },
-        style: {
-            type: "string",
-            enum: ["formal", "casual", "enthusiastic"],
-            description: "Style of greeting",
-        },
     },
-    async ({ name, style }) => {
+});
+
+// Calculator with type-safe multiply operation
+const multiplyTool = defineToolWithZod({
+    name: "multiply",
+    description: "Multiplies two numbers together",
+    schema: z.object({
+        a: z.number().describe("First number"),
+        b: z.number().describe("Second number"),
+    }),
+    execute: async (args) => {
+        // ✅ args is typed as { a: number; b: number }
+        const result = args.a * args.b;
+        console.log(`  📊 multiply(${args.a}, ${args.b}) = ${result}`);
+        return result;
+    },
+});
+
+// Agentic tool with enum support
+const greetTool = defineToolWithZod({
+    name: "greet",
+    description: "Greets a person by name with a custom message",
+    schema: z.object({
+        name: z.string().describe("Name of the person to greet"),
+        style: z.enum(["formal", "casual", "enthusiastic"]).describe("Style of greeting"),
+    }),
+    execute: async (args) => {
+        // ✅ args is typed as { name: string; style: "formal" | "casual" | "enthusiastic" }
         let greeting: string;
-        switch (style) {
+        switch (args.style) {
             case "formal":
-                greeting = `Good day, ${name}. It is a pleasure to meet you.`;
+                greeting = `Good day, ${args.name}. It is a pleasure to meet you.`;
                 break;
             case "enthusiastic":
-                greeting = `Hey ${name}!!! So excited to see you! 🎉`;
+                greeting = `Hey ${args.name}!!! So excited to see you! 🎉`;
                 break;
             case "casual":
             default:
-                greeting = `Hey ${name}, what's up?`;
+                greeting = `Hey ${args.name}, what's up?`;
         }
         console.log(`  💬 ${greeting}`);
         return greeting;
     },
-    { agentic: true } // This tool can extract parameters from context
-);
+    agentic: true, // This tool can extract parameters from context
+});
 
-console.log("✅ Tools created: add, multiply, greet");
+console.log("✅ Tools created with Zod: add, multiply, greet");
+
 
 // ============================================
 // Step 3: Create Agent
 // ============================================
 
+// Convert TypedTools to regular Tools for the Agent
 const agent = new Agent({
-    tools: [addTool, multiplyTool, greetTool],
+    tools: [
+        typedToolToTool(addTool),
+        typedToolToTool(multiplyTool),
+        typedToolToTool(greetTool),
+    ],
     llmService: llmService,
     maxRetries: 3,
     retryDelay: 1000,
